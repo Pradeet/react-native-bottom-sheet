@@ -1,3 +1,3 @@
-module.exports = {
-  a: 'new string from src',
-};
+import BottomSheet from './BottomSheet.native';
+
+module.exports = BottomSheet;
