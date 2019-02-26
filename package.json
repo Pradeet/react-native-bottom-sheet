@@ -22,7 +22,7 @@
     "dialog"
   ],
   "author": "Pradeet Swamy <pradeet1995@gmail.com>",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/Pradeet/react-native-bottom-sheet/issues"
   },
