@@ -146,8 +146,8 @@ class BottomSheet extends React.Component {
       dragEnabled={this.props.dragEnabled}
       onSnap={this.onSnap}
       alertAreas={[
-        { id: 'dismissArea', influenceArea: { top: this.props.maximumPanelTopMargin - 10 } },
-        { id: 'topPosition', influenceArea: { top: this.state.panelTopMargin + 40 } }
+        { id: 'dismissArea', influenceArea: { top: this.props.maximumPanelTopMargin - 10 } }, // before the bottom sheet will appear on the viewport.
+        { id: 'topPosition', influenceArea: { top: this.state.panelTopMargin + 40 } } // before the bottom sheet snaps to the top position
       ]}
       onAlert={this.onAlert}
       animatedNativeDriver
