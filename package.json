@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/index.js",
   "scripts": {
-    "lint": "eslint src ./RNBottomSheetExample/App.js",
+    "lint": "eslint src ./RNBottomSheetExample/src/App.js",
     "lint:fix": "npm run lint -- --fix"
   },
   "repository": {
@@ -31,7 +31,8 @@
     "lodash": "*",
     "prop-types": "*",
     "react-lifecycles-compat": "^3.0.4",
-    "react-native-iphone-x-helper": "*"
+    "react-native-iphone-x-helper": "*",
+    "reselect": "^3.0.1"
   },
   "devDependencies": {
     "babel-eslint": "^10.0.1",

@@ -3,11 +3,16 @@ import PropTypes from 'prop-types';
 import { polyfill } from 'react-lifecycles-compat';
 import Interactable from 'react-native-interactable';
 import { Animated, TouchableHighlight, Dimensions, StatusBar, ScrollView, Image, View, Text } from 'react-native';
+import { createSelector } from 'reselect';
 
 import _map from 'lodash/map';
 import _get from 'lodash/get';
 import _noop from 'lodash/noop';
 import _isEmpty from 'lodash/isEmpty';
+import _isArray from 'lodash/isArray';
+import _isNumber from 'lodash/isNumber';
+import _times from 'lodash/times';
+import _reduce from 'lodash/reduce';
 
 import { Button, ComponentPropTypes } from './components';
 
@@ -134,15 +139,18 @@ class BottomSheet extends React.Component {
     <Interactable.View
       ref={(interactableViewRef) => { this.interactableViewRef = interactableViewRef; }}
       verticalOnly
-      snapPoints={[{ y: this.state.panelTopMargin, tension: 200 }, { y: this.props.maximumPanelTopMargin, tension: 200 }]}
+      snapPoints={this.getSnapPoints(this.props, this.state)}
       initialPosition={{ y: this.props.maximumPanelTopMargin }}
       animatedValueY={this.deltaY}
       boundaries={{ top: this.state.panelTopMargin }}
       dragEnabled={this.props.dragEnabled}
       onSnap={this.onSnap}
-      alertAreas={[{ id: 'dismissArea', influenceArea: { top: this.props.maximumPanelTopMargin - 10 } }]}
+      alertAreas={[
+        { id: 'dismissArea', influenceArea: { top: this.props.maximumPanelTopMargin - 10 } }, // before the bottom sheet will appear on the viewport.
+        { id: 'topPosition', influenceArea: { top: this.state.panelTopMargin + 40 } } // before the bottom sheet snaps to the top position
+      ]}
       onAlert={this.onAlert}
-      animatedNativeDriver // whether integration with Animated should use native driver
+      animatedNativeDriver
     >
       <Button hasTouchFeedback={false} onPress={_noop} style={styles.grow} onLayout={this.onPanelLayout}>
         {this.renderPanel()}
@@ -156,7 +164,7 @@ class BottomSheet extends React.Component {
     return (
       <View style={[styles.panel, panelStyle, { height: this.props.maximumPanelTopMargin - this.state.panelTopMargin }]}>
         {this.renderPanelHeader()}
-        {contentView()}
+        {contentView({ animValue: this.deltaY, scrollHandlers: { onScroll: this.onScroll, scrollEnabled: false, ref: this.setScrollViewRef, scrollEventThrottle: 12 } })}
         {this.renderPanelFooter()}
       </View>
     );
@@ -195,7 +203,7 @@ class BottomSheet extends React.Component {
 
     return (
       <ScrollView
-        ref={(scrollViewRef) => { this.scrollViewRef = scrollViewRef; }}
+        ref={this.setScrollViewRef}
         style={styles.grow}
         scrollEnabled={false}
         onScroll={this.onScroll}
@@ -291,9 +299,15 @@ class BottomSheet extends React.Component {
       }, () => {
         this.props.onDismiss();
       });
-    } else if (this.currentSnap === SNAP_POINTS_INDEX.DISMISS_SHEET && event.nativeEvent.dismissArea === DISMISS_AREA.LEAVE) {
+    } else if (event.nativeEvent.dismissArea === DISMISS_AREA.LEAVE) {
+      this.currentSnap = SNAP_POINTS_INDEX.MAXIMUM_POSITION;
+    }
+
+    if (event.nativeEvent.topPosition === DISMISS_AREA.LEAVE) {
       this.currentSnap = SNAP_POINTS_INDEX.MAXIMUM_POSITION;
       this.setScrollViewState(true);
+    } else if (event.nativeEvent.topPosition === DISMISS_AREA.ENTER) {
+      this.setScrollViewState(false);
     }
   };
 
@@ -301,16 +315,58 @@ class BottomSheet extends React.Component {
     // TODO: Add functionalities on Snap event
   };
 
+  getAllSnapPoints = (panelTopMargin, maximumPanelTopMargin, additionalSnapPoints) => {
+    let snapPoints = [{ y: panelTopMargin, tension: 200 }, { y: maximumPanelTopMargin, tension: 200 }];
+    if (!_isEmpty(additionalSnapPoints) && _isArray(additionalSnapPoints)) {
+      _reduce(additionalSnapPoints, (res, snapPoint) => {
+        if (snapPoint < panelTopMargin) {
+          showWarning(`The snap point ${snapPoint} requires content area greater than the available content size / screen size. This snap point will be ignored.`);
+        } else {
+          res.push({ y: snapPoint, tension: 200 });
+        }
+      }, snapPoints);
+    } else if (_isNumber(additionalSnapPoints) && additionalSnapPoints > 0 && maximumPanelTopMargin - panelTopMargin > 0) {
+      const totalDisplacement = maximumPanelTopMargin - panelTopMargin;
+      const disp = totalDisplacement / (additionalSnapPoints + 1);
+      snapPoints = [...snapPoints, ..._map(_times(additionalSnapPoints), num => ({ y: ((num + 1) * disp) + panelTopMargin, tension: 200 }))];
+    }
+    return snapPoints;
+  };
+
+  getSnapPoints = createSelector(
+    (props, state) => state.panelTopMargin,
+    props => props.maximumPanelTopMargin,
+    props => props.additionalSnapPoints,
+    this.getAllSnapPoints
+  );
+
   dismissBottomSheet = () => {
     if (this.interactableViewRef) {
       this.interactableViewRef.snapTo({ index: SNAP_POINTS_INDEX.DISMISS_SHEET });
     }
   };
 
+  setScrollViewRef = (scrollViewRef) => { this.scrollViewRef = scrollViewRef; };
+
   scrollToCurrentTopMarginPosition = () => {
     requestAnimationFrame(() => {
+      let snapPointIndex = SNAP_POINTS_INDEX.MAXIMUM_POSITION;
+      const { additionalSnapPoints, initialSnapPointIndex } = this.props;
+      let additionalSnapPointCount = 0;
+      if (!_isEmpty(additionalSnapPoints) && _isArray(additionalSnapPoints)) {
+        additionalSnapPointCount = additionalSnapPoints.length;
+      } else if (_isNumber(additionalSnapPoints) && additionalSnapPoints > 0) {
+        additionalSnapPointCount = additionalSnapPoints;
+      }
+      if (initialSnapPointIndex <= additionalSnapPointCount) {
+        if (initialSnapPointIndex > 0) {
+          snapPointIndex = initialSnapPointIndex + 1;
+        }
+      } else {
+        showWarning(`The initialSnapPointIndex ${this.props.initialSnapPointIndex} is more than the additional snap points provided ${additionalSnapPointCount}`);
+      }
       if (this.interactableViewRef) {
-        this.interactableViewRef.snapTo({ index: SNAP_POINTS_INDEX.MAXIMUM_POSITION });
+        this.interactableViewRef.snapTo({ index: snapPointIndex });
       }
     });
   };
@@ -417,15 +473,17 @@ BottomSheet.propTypes = {
   },
   shouldScrollToNewPosition: PropTypes.bool,
   items: PropTypes.arrayOf(PropTypes.shape({
-    key: PropTypes.string,
-    label: PropTypes.string,
+    key: PropTypes.string.isRequired,
+    label: PropTypes.string.isRequired,
     image: PropTypes.string
   })),
   renderContent: (props, propName, componentName) => {
     if (!props.renderContent && _isEmpty(props.items)) {
       showWarning(`One of props 'items' or 'renderContent' was not specified in '${componentName}'.`);
     }
-  }
+  },
+  additionalSnapPoints: PropTypes.oneOfType([PropTypes.number, PropTypes.arrayOf(PropTypes.number)]),
+  initialSnapPointIndex: PropTypes.number
 };
 
 BottomSheet.defaultProps = {
@@ -447,6 +505,7 @@ BottomSheet.defaultProps = {
   shouldScrollToNewPosition: true,
   maximumPanelTopMargin: SCREEN_HEIGHT,
   minimumPanelTopMargin: WINDOW_HEIGHT / 4,
+  initialSnapPointIndex: 0
 };
 
 module.exports = polyfill(BottomSheet);
